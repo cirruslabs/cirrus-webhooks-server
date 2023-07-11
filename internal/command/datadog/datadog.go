@@ -4,6 +4,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/DataDog/datadog-go/v5/statsd"
@@ -26,6 +27,24 @@ var (
 	ErrDatadogFailed               = errors.New("failed to stream Cirrus CI events to DataDog")
 	ErrSignatureVerificationFailed = errors.New("event signature verification failed")
 )
+
+type commonWebhookFields struct {
+	Action *string
+	Actor  struct {
+		ID *int64
+	}
+	Repository struct {
+		ID    *int64
+		Owner *string
+		Name  *string
+	}
+	Build struct {
+		ID *int64
+	}
+	Task struct {
+		ID *int64
+	}
+}
 
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -125,6 +144,9 @@ func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, statsdClie
 		Text:  string(body),
 	}
 
+	// Enrich the event with tags
+	enrichEventWithTags(body, evt, logger)
+
 	if err := evt.Check(); err != nil {
 		return fmt.Errorf("%w: event validation failed: %v", ErrDatadogFailed, err)
 	}
@@ -161,4 +183,41 @@ func verifyEvent(ctx echo.Context, body []byte) error {
 	}
 
 	return nil
+}
+
+func enrichEventWithTags(body []byte, evt *statsd.Event, logger *zap.SugaredLogger) {
+	var commonWebhookFields commonWebhookFields
+
+	if err := json.Unmarshal(body, &commonWebhookFields); err != nil {
+		logger.Warnf("failed to enrich DataDog event with tags: "+
+			"failed to parse the webhook event as JSON: %v", err)
+
+		return
+	}
+
+	if value := commonWebhookFields.Action; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("action:%s", *value))
+	}
+
+	if value := commonWebhookFields.Actor.ID; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("actor_id:%d", *value))
+	}
+
+	if value := commonWebhookFields.Repository.ID; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_id:%d", *value))
+	}
+	if value := commonWebhookFields.Repository.Owner; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_owner:%s", *value))
+	}
+	if value := commonWebhookFields.Repository.Name; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_name:%s", *value))
+	}
+
+	if value := commonWebhookFields.Build.ID; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("build_id:%d", *value))
+	}
+
+	if value := commonWebhookFields.Task.ID; value != nil {
+		evt.Tags = append(evt.Tags, fmt.Sprintf("task_id:%d", *value))
+	}
 }
