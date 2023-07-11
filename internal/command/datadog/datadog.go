@@ -140,8 +140,9 @@ func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, statsdClie
 
 	// Log this event into the DataDog
 	evt := &statsd.Event{
-		Title: fmt.Sprintf("Webhook event of type %s", eventType),
+		Title: "Webhook event",
 		Text:  string(body),
+		Tags:  []string{fmt.Sprintf("type:%s", presentedEventType)},
 	}
 
 	// Enrich the event with tags
