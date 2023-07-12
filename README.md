@@ -2,11 +2,25 @@
 
 Examples of the webhook event processors from the Cirrus CI.
 
-## Processors
-
-## DataDog
+## DataDog processor
 
 This processor receives, enriches and streams Cirrus CI webhook events to DataDog.
+
+### Usage
+
+```
+docker run -it --rm ghcr.io/cirruslabs/cirrus-webhooks-server:latest datadog
+```
+
+The following command-line arguments are supported:
+
+* `--dogstatsd-addr` (`string`) — DogStatsD address to send the events to (defaults to `127.0.0.1:8125`)
+* `--event-type` (`string`) — event type to process (for example `build`, `task` or `audit_event`) (defaults to `audit_event`)
+* `--http-addr` (`string`) — address on which the HTTP server will listen on (defaults to `:8080`)
+* `--http-path` (`string`) — HTTP path on which the webhook events will be expected (defaults to `/`)
+* `--secret-token` (`string`) — if specified, this value will be used as a HMAC SHA-256 secret to verify the webhook events
+
+### Example
 
 The simplest way to try this processor is to use Docker and [ngrok](https://ngrok.com/).
 
