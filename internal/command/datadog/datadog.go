@@ -7,8 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/DataDog/datadog-go/v5/statsd"
 	"github.com/brpaz/echozap"
+	"github.com/cirruslabs/cirrus-webhooks-server/internal/datadogsender"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
@@ -21,10 +21,12 @@ var httpAddr string
 var httpPath string
 var eventType string
 var secretToken string
-var dogStatsdAddr string
+var dogstatsdAddr string
+var apiKey string
+var apiSite string
 
 var (
-	ErrDatadogFailed               = errors.New("failed to stream Cirrus CI events to DataDog")
+	ErrDatadogFailed               = errors.New("failed to stream Cirrus CI events to Datadog")
 	ErrSignatureVerificationFailed = errors.New("event signature verification failed")
 )
 
@@ -49,7 +51,7 @@ type commonWebhookFields struct {
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "datadog",
-		Short: "Stream Cirrus CI webhook events to DataDog",
+		Short: "Stream Cirrus CI webhook events to Datadog",
 		RunE:  runDatadog,
 	}
 
@@ -61,8 +63,13 @@ func NewCommand() *cobra.Command {
 		"event type to process (for example \"build\", \"task\" or \"audit_event\")")
 	cmd.PersistentFlags().StringVar(&secretToken, "secret-token", "",
 		"if specified, this value will be used as a HMAC SHA-256 secret to verify the webhook events")
-	cmd.PersistentFlags().StringVar(&dogStatsdAddr, "dogstatsd-addr", "127.0.0.1:8125",
-		"DogStatsD address to send the events to")
+	cmd.PersistentFlags().StringVar(&dogstatsdAddr, "dogstatsd-addr", "",
+		"enables sending events via the DogStatsD protocol to the specified address "+
+			"(for example, --dogstatsd-addr=127.0.0.1:8125)")
+	cmd.PersistentFlags().StringVar(&apiKey, "api-key", "",
+		"Enables sending events via the Datadog API using the specified API key")
+	cmd.PersistentFlags().StringVar(&apiSite, "api-site", "datadoghq.com",
+		"specifies the Datadog site to use when sending events via the Datadog API")
 
 	return cmd
 }
@@ -71,12 +78,21 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 	// Initialize the logger
 	logger := zap.Must(zap.NewProduction()).Sugar()
 
-	// Initialize the DogStatsD client
-	logger.Infof("connecting to DogStatsD on %s", dogStatsdAddr)
-	dogStatsdClient, err := statsd.New(dogStatsdAddr)
+	var sender datadogsender.Sender
+	var err error
+
+	switch {
+	case dogstatsdAddr != "":
+		sender, err = datadogsender.NewDogstatsdSender(dogstatsdAddr)
+	case apiKey != "":
+		sender, err = datadogsender.NewAPISender(apiKey, apiSite)
+	default:
+		return fmt.Errorf("%w: no sender configured, please specify either --api-key or --dogstatsd-addr",
+			ErrDatadogFailed)
+	}
+
 	if err != nil {
-		return fmt.Errorf("%w: failed to initialize DogStatsD client: %v",
-			ErrDatadogFailed, err)
+		return err
 	}
 
 	// Configure HTTP server
@@ -85,7 +101,7 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 	e.Use(echozap.ZapLogger(logger.Desugar()))
 
 	e.POST(httpPath, func(ctx echo.Context) error {
-		return processWebhookEvent(ctx, logger, dogStatsdClient)
+		return processWebhookEvent(ctx, logger, sender)
 	})
 
 	server := &http.Server{
@@ -114,7 +130,7 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 	return <-httpServerErrCh
 }
 
-func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, statsdClient *statsd.Client) error {
+func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, sender datadogsender.Sender) error {
 	// Make sure this is an event we're looking for
 	presentedEventType := ctx.Request().Header.Get("X-Cirrus-Event")
 	if presentedEventType != eventType {
@@ -138,8 +154,8 @@ func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, statsdClie
 		return ctx.NoContent(http.StatusBadRequest)
 	}
 
-	// Log this event into the DataDog
-	evt := &statsd.Event{
+	// Log this event into the Datadog
+	evt := &datadogsender.Event{
 		Title: "Webhook event",
 		Text:  string(body),
 		Tags:  []string{fmt.Sprintf("type:%s", presentedEventType)},
@@ -148,11 +164,7 @@ func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, statsdClie
 	// Enrich the event with tags
 	enrichEventWithTags(body, evt, logger)
 
-	if err := evt.Check(); err != nil {
-		return fmt.Errorf("%w: event validation failed: %v", ErrDatadogFailed, err)
-	}
-
-	if err := statsdClient.Event(evt); err != nil {
+	if err := sender.SendEvent(ctx.Request().Context(), evt); err != nil {
 		return fmt.Errorf("%w: %v", ErrDatadogFailed, err)
 	}
 
@@ -186,11 +198,11 @@ func verifyEvent(ctx echo.Context, body []byte) error {
 	return nil
 }
 
-func enrichEventWithTags(body []byte, evt *statsd.Event, logger *zap.SugaredLogger) {
+func enrichEventWithTags(body []byte, evt *datadogsender.Event, logger *zap.SugaredLogger) {
 	var commonWebhookFields commonWebhookFields
 
 	if err := json.Unmarshal(body, &commonWebhookFields); err != nil {
-		logger.Warnf("failed to enrich DataDog event with tags: "+
+		logger.Warnf("failed to enrich Datadog event with tags: "+
 			"failed to parse the webhook event as JSON: %v", err)
 
 		return
