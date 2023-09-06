@@ -9,17 +9,19 @@ import (
 	"fmt"
 	"github.com/brpaz/echozap"
 	"github.com/cirruslabs/cirrus-webhooks-server/internal/datadogsender"
+	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/labstack/echo/v4"
 	"github.com/spf13/cobra"
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
 var httpAddr string
 var httpPath string
-var eventType string
+var eventTypes []string
 var secretToken string
 var dogstatsdAddr string
 var apiKey string
@@ -59,8 +61,9 @@ func NewCommand() *cobra.Command {
 		"address on which the HTTP server will listen on")
 	cmd.PersistentFlags().StringVar(&httpPath, "http-path", "/",
 		"HTTP path on which the webhook events will be expected")
-	cmd.PersistentFlags().StringVar(&eventType, "event-type", "audit_event",
-		"event type to process (for example \"build\", \"task\" or \"audit_event\")")
+	cmd.PersistentFlags().StringSliceVar(&eventTypes, "event-types", []string{},
+		"comma-separated list of the event types to limit processing to "+
+			"(for example, --event-types=audit_event or --event-types=build,task")
 	cmd.PersistentFlags().StringVar(&secretToken, "secret-token", "",
 		"if specified, this value will be used as a HMAC SHA-256 secret to verify the webhook events")
 	cmd.PersistentFlags().StringVar(&dogstatsdAddr, "dogstatsd-addr", "",
@@ -78,6 +81,7 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 	// Initialize the logger
 	logger := zap.Must(zap.NewProduction()).Sugar()
 
+	// Initialize a Datadog sender
 	var sender datadogsender.Sender
 	var err error
 
@@ -95,13 +99,16 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	// Convert event types to a set for faster lookup
+	eventTypesSet := mapset.NewSet[string](eventTypes...)
+
 	// Configure HTTP server
 	e := echo.New()
 
 	e.Use(echozap.ZapLogger(logger.Desugar()))
 
 	e.POST(httpPath, func(ctx echo.Context) error {
-		return processWebhookEvent(ctx, logger, sender)
+		return processWebhookEvent(ctx, logger, sender, eventTypesSet)
 	})
 
 	server := &http.Server{
@@ -130,12 +137,18 @@ func runDatadog(cmd *cobra.Command, args []string) error {
 	return <-httpServerErrCh
 }
 
-func processWebhookEvent(ctx echo.Context, logger *zap.SugaredLogger, sender datadogsender.Sender) error {
+func processWebhookEvent(
+	ctx echo.Context,
+	logger *zap.SugaredLogger,
+	sender datadogsender.Sender,
+	eventTypesSet mapset.Set[string],
+) error {
 	// Make sure this is an event we're looking for
 	presentedEventType := ctx.Request().Header.Get("X-Cirrus-Event")
-	if presentedEventType != eventType {
-		logger.Debugf("skipping event of type %q because we only process events of type %q",
-			presentedEventType, eventType)
+
+	if eventTypesSet.Cardinality() != 0 && !eventTypesSet.Contains(presentedEventType) {
+		logger.Debugf("skipping event of type %q because we only process events of types %s",
+			presentedEventType, strings.Join(eventTypesSet.ToSlice(), ", "))
 
 		return nil
 	}
