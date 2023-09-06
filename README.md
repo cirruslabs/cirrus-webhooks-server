@@ -17,7 +17,7 @@ The following command-line arguments are supported:
 * `--api-key` (`string`) — enables sending events via the Datadog API using the specified API key
 * `--api-site` (`string`) — specifies the [Datadog site](https://docs.datadoghq.com/getting_started/site/) to use when sending events via the Datadog API (defaults to `datadoghq.com`)
 * `--dogstatsd-addr` — enables sending events via the DogStatsD protocol to the specified address (for example, `--dogstatsd-addr=127.0.0.1:8125`)
-* `--event-types` (`string`) — comma-separated list of the event types to limit processing to (for example, --event-types=audit_event or --event-types=build,task
+* `--event-types` (`string`) — comma-separated list of the event types to limit processing to (for example, `--event-types=audit_event` or `--event-types=build,task`)
 * `--http-addr` (`string`) — address on which the HTTP server will listen on (defaults to `:8080`)
 * `--http-path` (`string`) — HTTP path on which the webhook events will be expected (defaults to `/`)
 * `--secret-token` (`string`) — if specified, this value will be used as a HMAC SHA-256 secret to verify the webhook events
