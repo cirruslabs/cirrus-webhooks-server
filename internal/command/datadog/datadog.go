@@ -19,6 +19,7 @@ import (
 	"time"
 )
 
+var debug bool
 var httpAddr string
 var httpPath string
 var eventTypes []string
@@ -57,6 +58,7 @@ func NewCommand() *cobra.Command {
 		RunE:  runDatadog,
 	}
 
+	cmd.PersistentFlags().BoolVar(&debug, "debug", false, "enable debug logging")
 	cmd.PersistentFlags().StringVar(&httpAddr, "http-addr", ":8080",
 		"address on which the HTTP server will listen on")
 	cmd.PersistentFlags().StringVar(&httpPath, "http-path", "/",
@@ -79,7 +81,11 @@ func NewCommand() *cobra.Command {
 
 func runDatadog(cmd *cobra.Command, args []string) error {
 	// Initialize the logger
-	logger := zap.Must(zap.NewProduction()).Sugar()
+	config := zap.NewProductionConfig()
+	if debug {
+		config.Level = zap.NewAtomicLevelAt(zap.DebugLevel)
+	}
+	logger := zap.Must(config.Build()).Sugar()
 
 	// Initialize a Datadog sender
 	var sender datadogsender.Sender
