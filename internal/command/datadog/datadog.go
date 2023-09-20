@@ -156,7 +156,7 @@ func processWebhookEvent(
 		logger.Debugf("skipping event of type %q because we only process events of types %s",
 			presentedEventType, strings.Join(eventTypesSet.ToSlice(), ", "))
 
-		return nil
+		return ctx.String(http.StatusOK, fmt.Sprintf("skipping event of type %q", presentedEventType))
 	}
 
 	body, err := io.ReadAll(ctx.Request().Body)
@@ -183,11 +183,12 @@ func processWebhookEvent(
 	// Enrich the event with tags
 	enrichEventWithTags(body, evt, logger)
 
-	if err := sender.SendEvent(ctx.Request().Context(), evt); err != nil {
+	message, err := sender.SendEvent(ctx.Request().Context(), evt)
+	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDatadogFailed, err)
 	}
 
-	return nil
+	return ctx.String(http.StatusCreated, message)
 }
 
 func verifyEvent(ctx echo.Context, body []byte) error {
