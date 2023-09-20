@@ -30,7 +30,7 @@ func NewAPISender(apiKey string, apiSite string) (*APISender, error) {
 	}, nil
 }
 
-func (sender *APISender) SendEvent(ctx context.Context, event *Event) error {
+func (sender *APISender) SendEvent(ctx context.Context, event *Event) (string, error) {
 	ctx = context.WithValue(
 		ctx,
 		datadog.ContextAPIKeys,
@@ -47,14 +47,18 @@ func (sender *APISender) SendEvent(ctx context.Context, event *Event) error {
 			"site": sender.apiSite,
 		})
 
-	_, _, err := sender.eventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
+	response, _, err := sender.eventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
 		Title: event.Title,
 		Text:  event.Text,
 		Tags:  event.Tags,
 	})
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrAPISenderFailed, err)
+		return "", fmt.Errorf("%w: %v", ErrAPISenderFailed, err)
 	}
 
-	return nil
+	if response.Event == nil {
+		return "", fmt.Errorf("%w: %v", ErrAPISenderFailed, "response.Event is nil")
+	}
+
+	return fmt.Sprintf("DataDog event id: %v", response.Event.Id), nil
 }
