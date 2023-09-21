@@ -5,14 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
+	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
+	"strings"
 )
 
 var ErrAPISenderFailed = errors.New("API sender failed to send the event")
 
 type APISender struct {
 	apiClient *datadog.APIClient
-	eventsAPI *datadogV1.EventsApi
+	logsAPI   *datadogV2.LogsApi
 
 	apiKey  string
 	apiSite string
@@ -23,7 +24,7 @@ func NewAPISender(apiKey string, apiSite string) (*APISender, error) {
 
 	return &APISender{
 		apiClient: apiClient,
-		eventsAPI: datadogV1.NewEventsApi(apiClient),
+		logsAPI:   datadogV2.NewLogsApi(apiClient),
 
 		apiKey:  apiKey,
 		apiSite: apiSite,
@@ -47,18 +48,16 @@ func (sender *APISender) SendEvent(ctx context.Context, event *Event) (string, e
 			"site": sender.apiSite,
 		})
 
-	response, _, err := sender.eventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
-		Title: event.Title,
-		Text:  event.Text,
-		Tags:  event.Tags,
+	_, _, err := sender.logsAPI.SubmitLog(ctx, []datadogV2.HTTPLogItem{
+		{
+			Ddsource: datadog.PtrString("Cirrus Webhooks Server"),
+			Ddtags:   datadog.PtrString(strings.Join(event.Tags, ",")),
+			Message:  event.Text,
+		},
 	})
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrAPISenderFailed, err)
 	}
 
-	if response.Event == nil {
-		return "", fmt.Errorf("%w: %v", ErrAPISenderFailed, "response.Event is nil")
-	}
-
-	return fmt.Sprintf("DataDog event id: %v", response.Event.Id), nil
+	return "", nil
 }

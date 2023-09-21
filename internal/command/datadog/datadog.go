@@ -69,12 +69,12 @@ func NewCommand() *cobra.Command {
 	cmd.PersistentFlags().StringVar(&secretToken, "secret-token", "",
 		"if specified, this value will be used as a HMAC SHA-256 secret to verify the webhook events")
 	cmd.PersistentFlags().StringVar(&dogstatsdAddr, "dogstatsd-addr", "",
-		"enables sending events via the DogStatsD protocol to the specified address "+
+		"enables sending webhook events as Datadog events via the DogStatsD protocol to the specified address "+
 			"(for example, --dogstatsd-addr=127.0.0.1:8125)")
 	cmd.PersistentFlags().StringVar(&apiKey, "api-key", "",
-		"Enables sending events via the Datadog API using the specified API key")
+		"Enables sending webhook events as Datadog logs via the Datadog API using the specified API key")
 	cmd.PersistentFlags().StringVar(&apiSite, "api-site", "datadoghq.com",
-		"specifies the Datadog site to use when sending events via the Datadog API")
+		"specifies the Datadog site to use when sending webhook events as Datadog logs via the Datadog API")
 
 	return cmd
 }
@@ -177,7 +177,7 @@ func processWebhookEvent(
 	evt := &datadogsender.Event{
 		Title: "Webhook event",
 		Text:  string(body),
-		Tags:  []string{fmt.Sprintf("type:%s", presentedEventType)},
+		Tags:  []string{fmt.Sprintf("webhook_event_type:%s", presentedEventType)},
 	}
 
 	// Enrich the event with tags
