@@ -27,9 +27,10 @@ func NewDogstatsdSender(addr string) (*DogstatsdSender, error) {
 
 func (sender *DogstatsdSender) SendEvent(ctx context.Context, event *Event) (string, error) {
 	if err := sender.client.Event(&statsd.Event{
-		Title: event.Title,
-		Text:  event.Text,
-		Tags:  event.Tags,
+		Title:     event.Title,
+		Text:      event.Text,
+		Timestamp: event.Timestamp,
+		Tags:      event.Tags,
 	}); err != nil {
 		return "", fmt.Errorf("%w: %v", ErrDogstatsdSenderFailed, err)
 	}

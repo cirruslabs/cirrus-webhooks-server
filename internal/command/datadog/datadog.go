@@ -34,8 +34,9 @@ var (
 )
 
 type commonWebhookFields struct {
-	Action *string
-	Actor  struct {
+	Action    *string
+	Timestamp *int64
+	Actor     struct {
 		ID *int64
 	}
 	Repository struct {
@@ -183,6 +184,15 @@ func processWebhookEvent(
 	// Enrich the event with tags
 	enrichEventWithTags(body, evt, logger)
 
+	// Datadog silently discards log events submitted with a
+	// timestamp that is more than 18 hours in the past, sigh.
+	//
+	// [1]: https://docs.datadoghq.com/api/latest/logs/#send-logs
+	if !evt.Timestamp.IsZero() && time.Since(evt.Timestamp) >= 18*time.Hour {
+		logger.Warnf("submitting an event of type %q with a timestamp that is more than "+
+			"18 hours in the past, it'll likely going to be discarded", presentedEventType)
+	}
+
 	message, err := sender.SendEvent(ctx.Request().Context(), evt)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrDatadogFailed, err)
@@ -230,6 +240,10 @@ func enrichEventWithTags(body []byte, evt *datadogsender.Event, logger *zap.Suga
 
 	if value := commonWebhookFields.Action; value != nil {
 		evt.Tags = append(evt.Tags, fmt.Sprintf("action:%s", *value))
+	}
+
+	if timestamp := commonWebhookFields.Timestamp; timestamp != nil {
+		evt.Timestamp = time.UnixMilli(*timestamp).UTC()
 	}
 
 	if value := commonWebhookFields.Actor.ID; value != nil {
