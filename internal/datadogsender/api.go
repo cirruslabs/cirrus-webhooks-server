@@ -57,6 +57,7 @@ func (sender *APISender) SendEvent(ctx context.Context, event *Event) (string, e
 
 	if !event.Timestamp.IsZero() {
 		logItem.AdditionalProperties = map[string]string{
+			// https://docs.datadoghq.com/service_management/events/pipelines_and_processors/date_remapper/
 			"timestamp": event.Timestamp.Format(time.RFC3339),
 		}
 	}
