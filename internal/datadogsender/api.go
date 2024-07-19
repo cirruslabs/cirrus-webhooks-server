@@ -7,6 +7,7 @@ import (
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV2"
 	"strings"
+	"time"
 )
 
 var ErrAPISenderFailed = errors.New("API sender failed to send the event")
@@ -48,13 +49,19 @@ func (sender *APISender) SendEvent(ctx context.Context, event *Event) (string, e
 			"site": sender.apiSite,
 		})
 
-	_, _, err := sender.logsAPI.SubmitLog(ctx, []datadogV2.HTTPLogItem{
-		{
-			Ddsource: datadog.PtrString("Cirrus Webhooks Server"),
-			Ddtags:   datadog.PtrString(strings.Join(event.Tags, ",")),
-			Message:  event.Text,
-		},
-	})
+	logItem := datadogV2.HTTPLogItem{
+		Ddsource: datadog.PtrString("Cirrus Webhooks Server"),
+		Ddtags:   datadog.PtrString(strings.Join(event.Tags, ",")),
+		Message:  event.Text,
+	}
+
+	if !event.Timestamp.IsZero() {
+		logItem.AdditionalProperties = map[string]string{
+			"timestamp": event.Timestamp.Format(time.RFC3339),
+		}
+	}
+
+	_, _, err := sender.logsAPI.SubmitLog(ctx, []datadogV2.HTTPLogItem{logItem})
 	if err != nil {
 		return "", fmt.Errorf("%w: %v", ErrAPISenderFailed, err)
 	}
