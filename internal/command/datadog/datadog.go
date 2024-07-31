@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/brpaz/echozap"
+	payloadpkg "github.com/cirruslabs/cirrus-webhooks-server/internal/command/datadog/payload"
 	"github.com/cirruslabs/cirrus-webhooks-server/internal/datadogsender"
 	mapset "github.com/deckarep/golang-set/v2"
 	"github.com/labstack/echo/v4"
@@ -15,7 +16,6 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -33,25 +33,6 @@ var (
 	ErrDatadogFailed               = errors.New("failed to stream Cirrus CI events to Datadog")
 	ErrSignatureVerificationFailed = errors.New("event signature verification failed")
 )
-
-type commonWebhookFields struct {
-	Action    *string
-	Timestamp *int64
-	Actor     struct {
-		ID *int64
-	}
-	Repository struct {
-		ID    *int64
-		Owner *string
-		Name  *string
-	}
-	Build struct {
-		ID *int64
-	}
-	Task struct {
-		ID *int64
-	}
-}
 
 func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
@@ -183,7 +164,21 @@ func processWebhookEvent(
 	}
 
 	// Enrich the event with tags
-	enrichEventWithTags(ctx.Request().Header, body, evt, logger)
+	var payload payloadpkg.Payload
+
+	switch presentedEventType {
+	case "audit_event":
+		payload = &payloadpkg.AuditEvent{}
+	default:
+		payload = &payloadpkg.Common{}
+	}
+
+	if err = json.Unmarshal(body, payload); err != nil {
+		logger.Warnf("failed to enrich Datadog event with tags: "+
+			"failed to parse the webhook event of type %q as JSON: %v", presentedEventType, err)
+	} else {
+		payload.Enrich(ctx.Request().Header, evt, logger)
+	}
 
 	// Datadog silently discards log events submitted with a
 	// timestamp that is more than 18 hours in the past, sigh.
@@ -227,51 +222,4 @@ func verifyEvent(ctx echo.Context, body []byte) error {
 	}
 
 	return nil
-}
-
-func enrichEventWithTags(header http.Header, body []byte, evt *datadogsender.Event, logger *zap.SugaredLogger) {
-	var commonWebhookFields commonWebhookFields
-
-	if err := json.Unmarshal(body, &commonWebhookFields); err != nil {
-		logger.Warnf("failed to enrich Datadog event with tags: "+
-			"failed to parse the webhook event as JSON: %v", err)
-
-		return
-	}
-
-	if value := commonWebhookFields.Action; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("action:%s", *value))
-	}
-
-	if rawTimestamp := header.Get("X-Cirrus-Timestamp"); rawTimestamp != "" {
-		timestamp, err := strconv.ParseInt(rawTimestamp, 10, 64)
-		if err != nil {
-			logger.Warnf("failed to parse \"X-Cirrus-Timestamp\" timestamp value %q: %v",
-				rawTimestamp, err)
-		} else {
-			evt.Timestamp = time.UnixMilli(timestamp)
-		}
-	}
-
-	if value := commonWebhookFields.Actor.ID; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("actor_id:%d", *value))
-	}
-
-	if value := commonWebhookFields.Repository.ID; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_id:%d", *value))
-	}
-	if value := commonWebhookFields.Repository.Owner; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_owner:%s", *value))
-	}
-	if value := commonWebhookFields.Repository.Name; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("repository_name:%s", *value))
-	}
-
-	if value := commonWebhookFields.Build.ID; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("build_id:%d", *value))
-	}
-
-	if value := commonWebhookFields.Task.ID; value != nil {
-		evt.Tags = append(evt.Tags, fmt.Sprintf("task_id:%d", *value))
-	}
 }

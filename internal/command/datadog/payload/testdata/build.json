@@ -1,0 +1,24 @@
+{
+  "old_status": "COMPLETED",
+  "action": "updated",
+  "repository": {
+    "id": 5129885287448576,
+    "owner": "edigaryev",
+    "name": "awesome-system-calls",
+    "isPrivate": false
+  },
+  "build": {
+    "id": 5082236150611968,
+    "branch": "main",
+    "durationInSeconds": 18,
+    "changeIdInRepo": "1a7a425b71fd28274b739c9d410ca966aedbcd63",
+    "changeTimestamp": 1722406690000,
+    "changeMessageTitle": "Periodic update (#7)",
+    "status": "EXECUTING",
+    "user": {
+      "id": 5702969901449216,
+      "username": "edigaryev"
+    }
+  },
+  "task": {}
+}
