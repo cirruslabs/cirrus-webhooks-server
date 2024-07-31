@@ -15,6 +15,7 @@ import (
 	"go.uber.org/zap"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -182,7 +183,7 @@ func processWebhookEvent(
 	}
 
 	// Enrich the event with tags
-	enrichEventWithTags(body, evt, logger)
+	enrichEventWithTags(ctx.Request().Header, body, evt, logger)
 
 	// Datadog silently discards log events submitted with a
 	// timestamp that is more than 18 hours in the past, sigh.
@@ -228,7 +229,7 @@ func verifyEvent(ctx echo.Context, body []byte) error {
 	return nil
 }
 
-func enrichEventWithTags(body []byte, evt *datadogsender.Event, logger *zap.SugaredLogger) {
+func enrichEventWithTags(header http.Header, body []byte, evt *datadogsender.Event, logger *zap.SugaredLogger) {
 	var commonWebhookFields commonWebhookFields
 
 	if err := json.Unmarshal(body, &commonWebhookFields); err != nil {
@@ -242,8 +243,14 @@ func enrichEventWithTags(body []byte, evt *datadogsender.Event, logger *zap.Suga
 		evt.Tags = append(evt.Tags, fmt.Sprintf("action:%s", *value))
 	}
 
-	if timestamp := commonWebhookFields.Timestamp; timestamp != nil {
-		evt.Timestamp = time.UnixMilli(*timestamp).UTC()
+	if rawTimestamp := header.Get("X-Cirrus-Timestamp"); rawTimestamp != "" {
+		timestamp, err := strconv.ParseInt(rawTimestamp, 10, 64)
+		if err != nil {
+			logger.Warnf("failed to parse \"X-Cirrus-Timestamp\" timestamp value %q: %v",
+				rawTimestamp, err)
+		} else {
+			evt.Timestamp = time.UnixMilli(timestamp)
+		}
 	}
 
 	if value := commonWebhookFields.Actor.ID; value != nil {
