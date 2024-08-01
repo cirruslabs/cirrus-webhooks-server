@@ -20,7 +20,7 @@ func TestEnrichBuild(t *testing.T) {
 
 	evt := &datadogsender.Event{}
 
-	payload := payload.Common{}
+	payload := payload.BuildOrTask{}
 	require.NoError(t, json.Unmarshal(body, &payload))
 	payload.Enrich(http.Header{
 		"X-Cirrus-Timestamp": []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},
@@ -44,7 +44,7 @@ func TestEnrichTask(t *testing.T) {
 
 	evt := &datadogsender.Event{}
 
-	payload := payload.Common{}
+	payload := payload.BuildOrTask{}
 	require.NoError(t, json.Unmarshal(body, &payload))
 	payload.Enrich(http.Header{
 		"X-Cirrus-Timestamp": []string{strconv.FormatInt(time.Now().UnixMilli(), 10)},

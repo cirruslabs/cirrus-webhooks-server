@@ -169,15 +169,17 @@ func processWebhookEvent(
 	switch presentedEventType {
 	case "audit_event":
 		payload = &payloadpkg.AuditEvent{}
-	default:
-		payload = &payloadpkg.Common{}
+	case "build", "task":
+		payload = &payloadpkg.BuildOrTask{}
 	}
 
-	if err = json.Unmarshal(body, payload); err != nil {
-		logger.Warnf("failed to enrich Datadog event with tags: "+
-			"failed to parse the webhook event of type %q as JSON: %v", presentedEventType, err)
-	} else {
-		payload.Enrich(ctx.Request().Header, evt, logger)
+	if payload != nil {
+		if err = json.Unmarshal(body, payload); err != nil {
+			logger.Warnf("failed to enrich Datadog event with tags: "+
+				"failed to parse the webhook event of type %q as JSON: %v", presentedEventType, err)
+		} else {
+			payload.Enrich(ctx.Request().Header, evt, logger)
+		}
 	}
 
 	// Datadog silently discards log events submitted with a

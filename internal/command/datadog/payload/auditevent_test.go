@@ -29,7 +29,8 @@ func TestEnrichAuditEvent(t *testing.T) {
 	require.Equal(t, []string{
 		"action:created",
 		"type:graphql.mutation",
-		"actor_id:5702969901449216",
 		"data.mutationName:GenerateNewScopedAccessToken",
+		"actor_username:edigaryev",
+		"actor_location_ip:1.2.3.4",
 	}, evt.Tags)
 }

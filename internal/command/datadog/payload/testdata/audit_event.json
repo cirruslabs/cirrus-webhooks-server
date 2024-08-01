@@ -1,11 +1,13 @@
 {
-  "id": "ff0f89ae-5676-408d-8f58-f7631618ecfb",
+  "id": "bb2bde61-24e6-475c-a8a7-3f03bedcbd61",
   "type": "graphql.mutation",
-  "timestamp": 1722408795724,
+  "timestamp": 1722518406287,
   "data": "{\n  \"mutationName\": \"GenerateNewScopedAccessToken\",\n  \"platform\": \"github\",\n  \"ownerUid\": \"85709\",\n  \"durationSeconds\": 0,\n  \"permission\": \"READ\",\n  \"repositoryNames\": [\n    \"awesome-system-calls\"\n  ],\n  \"clientMutationId\": \"generate-scoped-token-85709awesome-system-calls\"\n}",
   "actor": {
-    "id": 5702969901449216
+    "id": 5702969901449216,
+    "username": "edigaryev"
   },
+  "actorLocationIp": "1.2.3.4",
   "action": "created",
   "repository": {},
   "build": {},
